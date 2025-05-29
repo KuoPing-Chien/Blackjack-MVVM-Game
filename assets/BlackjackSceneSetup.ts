@@ -4,10 +4,11 @@
  * 在Cocos Creator編輯器中使用此組件可快速創建完整的遊戲場景
  */
 
-import { _decorator, Component, Node, Label, Button, Canvas, Widget, UITransform, Color, Sprite, SpriteFrame, Material } from 'cc';
+import { _decorator, Component, Node, Label, Button, Canvas, Widget, UITransform, Color, Sprite, SpriteFrame, Material, EditBox } from 'cc';
 import { GameView } from './GameView';
 import { GameViewModel } from './GameViewModel';
 import { GameModel } from './GameModel';
+import { PlayerNameGameView } from './PlayerNameGameView';
 
 const { ccclass, property } = _decorator;
 
@@ -66,6 +67,11 @@ export class BlackjackSceneSetup extends Component {
     })
     textColor: Color = new Color(255, 255, 255);
 
+    @property({
+        tooltip: '是否啟用玩家姓名功能'
+    })
+    enablePlayerNames: boolean = true;
+
     // 私有屬性
     private gameView: GameView;
     private gameViewModel: GameViewModel;
@@ -108,6 +114,11 @@ export class BlackjackSceneSetup extends Component {
         
         // 創建狀態信息區域
         this.createStatusArea();
+        
+        // ===== 新增：創建玩家姓名區域 =====
+        if (this.enablePlayerNames) {
+            this.createPlayerNameArea();
+        }
         
         console.log('[場景設置] UI界面創建完成');
     }
@@ -323,6 +334,64 @@ export class BlackjackSceneSetup extends Component {
     }
 
     /**
+     * 創建玩家姓名區域
+     */
+    private createPlayerNameArea(): void {
+        // 玩家姓名容器 - 放在頂部
+        const playerNameContainer = new Node('PlayerName_Container');
+        this.uiContainer.addChild(playerNameContainer);
+        
+        const nameTransform = playerNameContainer.addComponent(UITransform);
+        nameTransform.setContentSize(600, 120);
+        playerNameContainer.setPosition(0, 450, 0); // 置於最頂部
+        
+        // 標題
+        const titleLabel = this.createLabel('PlayerName_Title', '玩家姓名設定', 28);
+        playerNameContainer.addChild(titleLabel);
+        titleLabel.setPosition(0, 40, 0);
+        
+        // 姓名輸入框
+        const nameInputNode = new Node('PlayerName_Input');
+        playerNameContainer.addChild(nameInputNode);
+        
+        const inputBox = nameInputNode.addComponent(EditBox);
+        inputBox.placeholder = '請輸入您的姓名';
+        inputBox.string = '';
+        
+        const inputTransform = nameInputNode.addComponent(UITransform);
+        inputTransform.setContentSize(300, 40);
+        nameInputNode.setPosition(0, 0, 0);
+        
+        // 按鈕區域
+        const buttonArea = new Node('PlayerName_Buttons');
+        playerNameContainer.addChild(buttonArea);
+        buttonArea.setPosition(0, -40, 0);
+        
+        // 連接按鈕
+        const connectButton = this.createButton('Connect_Button', '連接遊戲', this.secondaryColor);
+        buttonArea.addChild(connectButton);
+        connectButton.setPosition(-80, 0, 0);
+        
+        // 更新姓名按鈕
+        const updateButton = this.createButton('UpdateName_Button', '更新姓名', this.primaryColor);
+        buttonArea.addChild(updateButton);
+        updateButton.setPosition(80, 0, 0);
+        
+        // 線上玩家標籤
+        const onlineLabel = this.createLabel('Online_Players_Label', '線上玩家: 尚未連接', 18);
+        playerNameContainer.addChild(onlineLabel);
+        onlineLabel.setPosition(0, -80, 0);
+        
+        // 保存引用到節點
+        this.node['playerNameInput'] = inputBox;
+        this.node['connectButton'] = connectButton;
+        this.node['updateNameButton'] = updateButton;
+        this.node['onlinePlayersLabel'] = onlineLabel.getComponent(Label);
+        
+        console.log('[場景設置] 玩家姓名區域創建完成');
+    }
+
+    /**
      * 創建標籤輔助方法
      */
     private createLabel(name: string, text: string, fontSize: number): Node {
@@ -381,6 +450,12 @@ export class BlackjackSceneSetup extends Component {
         // 創建GameView組件
         this.gameView = this.node.addComponent(GameView);
         
+        // ===== 新增：創建PlayerNameGameView組件 =====
+        if (this.enablePlayerNames) {
+            const playerNameView = this.node.addComponent(PlayerNameGameView);
+            this.bindPlayerNameUIElements(playerNameView);
+        }
+        
         // 綁定UI元素到GameView
         this.bindUIToGameView();
         
@@ -406,6 +481,19 @@ export class BlackjackSceneSetup extends Component {
         this.gameView.connectionStatusLabel = this.node['connectionStatusLabel'];
         
         console.log('[場景設置] UI元素綁定完成');
+    }
+
+    /**
+     * 綁定玩家姓名UI元素到PlayerNameGameView
+     */
+    private bindPlayerNameUIElements(playerNameView: PlayerNameGameView): void {
+        // 綁定UI元素引用
+        playerNameView.playerNameInput = this.node['playerNameInput'];
+        playerNameView.connectButton = this.node['connectButton']?.getComponent(Button);
+        playerNameView.updateNameButton = this.node['updateNameButton']?.getComponent(Button);
+        playerNameView.onlinePlayersLabel = this.node['onlinePlayersLabel'];
+        
+        console.log('[場景設置] 玩家姓名UI元素綁定完成');
     }
 
     /**

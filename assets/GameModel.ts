@@ -31,24 +31,46 @@ export interface GameState {
 }
 
 /**
- * 伺服器訊息數據模型
+ * 擴展伺服器訊息數據模型，支持房間管理
  */
 export interface ServerMessage {
-    action: 'updateGameState' | 'gameOver' | 'nextPlayer' | 'dealerTurn'; // 動作類型
+    action: 'updateGameState' | 'gameOver' | 'nextPlayer' | 'dealerTurn' | 'joinedGame' | 'readyToStart' | 
+            'playerNameUpdated' | 'nameUpdateConfirmed' | 'nameUpdateFailed' | 
+            'roomCreated' | 'roomJoined' | 'roomLeft' | 'roomStateChanged' | 'countdownUpdate' | 'playerTurn' | 'playerTimeout';
     players?: Player[];         // 所有玩家狀態
     dealer?: Player;           // 莊家狀態
     currentPlayerIndex?: number; // 當前活躍玩家索引
     gamePhase?: string;        // 遊戲階段
     result?: string;           // 遊戲結果
+    playerId?: string;         // 玩家ID
+    playerName?: string;       // 玩家名稱
+    oldName?: string;          // 舊姓名
+    newName?: string;          // 新姓名
+    message?: string;          // 訊息內容
+    totalPlayers?: number;     // 總玩家數
+    
+    // 房間相關字段
+    roomId?: string;           // 房間ID
+    roomState?: string;        // 房間狀態
+    roomConfig?: any;          // 房間配置
+    countdown?: number;        // 倒計時
+    seconds?: number;          // 剩餘秒數
+    currentPlayer?: Player;    // 當前玩家
+    timeoutSeconds?: number;   // 超時秒數
 }
 
 /**
- * 客戶端訊息數據模型
+ * 擴展客戶端訊息數據模型，支持房間管理
  */
 export interface ClientMessage {
-    action: 'start' | 'hit' | 'stand' | 'join' | 'startGame' | 'playerHit' | 'playerStand' | 'joinGame'; // 動作類型
+    action: 'start' | 'hit' | 'stand' | 'join' | 'startGame' | 'playerHit' | 'playerStand' | 'joinGame' | 'updatePlayerName' |
+            'createRoom' | 'joinRoom' | 'leaveRoom' | 'playerReady' | string; // 允许自定义字符串类型
     playerId?: string;         // 玩家ID
     playerName?: string;       // 玩家名稱
+    name?: string;             // 用於updatePlayerName操作的新姓名
+    roomId?: string;           // 房間ID
+    roomConfig?: any;          // 房間配置
+    [key: string]: any;        // 其他可能的字段
 }
 
 /**
@@ -58,6 +80,7 @@ export interface GameConfig {
     serverUrl: string;              // 伺服器URL
     reconnectInterval: number;      // 重連間隔（毫秒）
     maxReconnectAttempts: number;   // 最大重連次數
+    nameUpdateCooldownMinutes: number; // 姓名更新冷卻時間（分鐘）
 }
 
 /**
@@ -112,7 +135,8 @@ export class GameModel {
         this._gameConfig = {
             serverUrl: 'ws://localhost:3000',
             reconnectInterval: 3000,
-            maxReconnectAttempts: 5
+            maxReconnectAttempts: 5,
+            nameUpdateCooldownMinutes: 5  // 預設5分鐘冷卻時間
         };
     }
 

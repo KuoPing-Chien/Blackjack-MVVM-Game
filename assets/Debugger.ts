@@ -56,6 +56,7 @@ export class Debugger extends Component {
         this.checkUIElements();
         this.checkMVVMArchitecture();
         this.checkServerConnection();
+        this.checkMultiplayerSettings();
         this.generateDiagnosticReport();
 
         console.log('='.repeat(60));
@@ -205,6 +206,96 @@ export class Debugger extends Component {
         testSocket.onclose = () => {
             console.log('  📡 WebSocket連接已關閉');
         };
+    }
+
+    /**
+     * 檢查多人遊戲設置
+     */
+    private checkMultiplayerSettings(): void {
+        console.log('\n🎮 檢查多人遊戲設置...');
+        
+        // 檢查多人遊戲相關類是否存在
+        try {
+            // 在游戏运行环境中，我们不能直接检查文件是否存在
+            console.log('  需要檢查的檔案：');
+            const files = [
+                'GameRoomManager.ts',
+                'MultiplayerRoomView.ts',
+                'RoomTypes.ts',
+                'server/multiplayer-server.js'
+            ];
+            
+            files.forEach(file => {
+                console.log(`  ${file}: 請手動確認此檔案是否存在`);
+            });
+            
+            // 檢查GameViewModel中多人遊戲相關方法
+            const gameViewModel = new GameViewModel();
+            const multiplayerMethods = [
+                'createRoom',
+                'joinRoom',
+                'leaveRoom',
+                'readyToStart',
+                'handleRoomCreated',
+                'handlePlayerTurn',
+                'sendCustomMessage'
+            ];
+            
+            console.log('\n  GameViewModel多人遊戲支持:');
+            
+            multiplayerMethods.forEach(method => {
+                const hasMethod = typeof (gameViewModel as any)[method] === 'function';
+                console.log(`    ${method}: ${hasMethod ? '✅ 已實現' : '❌ 未實現'}`);
+            });
+        } catch (error) {
+            console.error('  檢查多人遊戲設置時出錯:', error);
+        }
+    }
+    
+    /**
+     * 多人遊戲伺服器測試
+     */
+    public testMultiplayerServer(): void {
+        console.log('\n🌐 測試多人遊戲伺服器...');
+        
+        // 嘗試連接多人遊戲伺服器
+        try {
+            const testSocket = new WebSocket('ws://localhost:3000');
+            
+            testSocket.onopen = () => {
+                console.log('  ✅ 多人遊戲伺服器連接成功');
+                
+                // 發送ping消息
+                testSocket.send(JSON.stringify({
+                    action: 'ping',
+                    message: 'ping from debugger'
+                }));
+                
+                // 5秒後關閉連接
+                setTimeout(() => {
+                    testSocket.close();
+                }, 5000);
+            };
+            
+            testSocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('  📩 收到伺服器響應:', data);
+                } catch (e) {
+                    console.log('  📩 收到伺服器響應 (非JSON):', event.data);
+                }
+            };
+            
+            testSocket.onerror = (error) => {
+                console.log('  ❌ 多人遊戲伺服器連接失敗', error);
+            };
+            
+            testSocket.onclose = () => {
+                console.log('  📡 多人遊戲伺服器連接已關閉');
+            };
+        } catch (error) {
+            console.error('  測試多人遊戲伺服器時出錯:', error);
+        }
     }
 
     /**

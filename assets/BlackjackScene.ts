@@ -3,8 +3,9 @@
  * 負責初始化整個遊戲場景和UI元件
  */
 
-import { _decorator, Component, Node, Label, Button, Sprite, Canvas, UITransform, Widget, director } from 'cc';
+import { _decorator, Component, Node, Label, Button, Sprite, Canvas, UITransform, Widget, director, EditBox } from 'cc';
 import { GameView } from './GameView';
+import { PlayerNameGameView } from './PlayerNameGameView';
 
 const { ccclass, property } = _decorator;
 
@@ -34,6 +35,15 @@ export class BlackjackScene extends Component {
     // 狀態面板節點
     @property(Node)
     statusPanel: Node = null;
+
+    // ===== 新增：玩家姓名相關節點 =====
+    @property(Node)
+    playerNamePanel: Node = null;
+
+    @property({
+        tooltip: '是否啟用玩家姓名功能'
+    })
+    enablePlayerNames: boolean = true;
 
     /**
      * 場景開始時初始化
@@ -90,6 +100,12 @@ export class BlackjackScene extends Component {
         // 創建狀態面板
         this.statusPanel = this.createUINode('StatusPanel', this.uiPanel);
         this.setupStatusPanel(this.statusPanel);
+
+        // ===== 新增：創建玩家姓名面板 =====
+        if (this.enablePlayerNames) {
+            this.playerNamePanel = this.createUINode('PlayerNamePanel', this.uiPanel);
+            this.setupPlayerNamePanel(this.playerNamePanel);
+        }
     }
 
     /**
@@ -373,6 +389,15 @@ export class BlackjackScene extends Component {
         gameView.restartButton = this.findChildNode('RestartButton');
         gameView.gameResultLabel = this.findChildComponent('GameResultLabel', Label);
         gameView.connectionStatusLabel = this.findChildComponent('ConnectionStatusLabel', Label);
+
+        // ===== 新增：綁定玩家姓名相關UI =====
+        if (this.enablePlayerNames) {
+            const playerNameGameView = this.gameContainer.getComponent(PlayerNameGameView);
+            if (!playerNameGameView) {
+                const nameView = this.gameContainer.addComponent(PlayerNameGameView);
+                this.bindPlayerNameUI(nameView);
+            }
+        }
         
         console.log('🔗 UI元素綁定完成:', {
             playerScoreLabel: !!gameView.playerScoreLabel,
@@ -441,5 +466,89 @@ export class BlackjackScene extends Component {
             console.log('🔄 手動重新連接...');
             // 如果GameView有重連方法，在這裡調用
         }
+    }
+
+    /**
+     * 設置玩家姓名面板
+     */
+    private setupPlayerNamePanel(node: Node): void {
+        const uiTransform = node.getComponent(UITransform);
+        const widget = node.addComponent(Widget);
+        
+        // 設置為頂部中央
+        widget.isAlignTop = true;
+        widget.isAlignLeft = true;
+        widget.isAlignRight = true;
+        widget.top = 20;
+        widget.left = 20;
+        widget.right = 20;
+        
+        uiTransform.height = 150;
+        widget.updateAlignment();
+        
+        // 創建玩家姓名相關UI
+        this.createPlayerNameUI(node);
+    }
+
+    /**
+     * 創建玩家姓名相關UI
+     */
+    private createPlayerNameUI(parent: Node): void {
+        // 主標題
+        const titleNode = this.createUINode('PlayerNameTitle', parent);
+        const titleLabel = titleNode.addComponent(Label);
+        titleLabel.string = '玩家姓名設定';
+        titleLabel.fontSize = 24;
+        titleNode.setPosition(0, 60, 0);
+        this.setupCenterLabel(titleNode);
+
+        // 玩家姓名輸入框
+        const nameInputNode = this.createUINode('PlayerNameInput', parent);
+        const nameInput = nameInputNode.addComponent(EditBox);
+        nameInput.placeholder = '請輸入您的姓名';
+        nameInput.string = '';
+        nameInputNode.setPosition(0, 20, 0);
+        
+        const nameInputTransform = nameInputNode.getComponent(UITransform);
+        nameInputTransform.width = 250;
+        nameInputTransform.height = 40;
+
+        // 按鈕容器
+        const buttonContainer = this.createUINode('NameButtonContainer', parent);
+        buttonContainer.setPosition(0, -20, 0);
+
+        // 連接按鈕
+        const connectButton = this.createButton('ConnectButton', '連接遊戲', buttonContainer);
+        connectButton.setPosition(-80, 0, 0);
+
+        // 更新姓名按鈕
+        const updateButton = this.createButton('UpdateNameButton', '更新姓名', buttonContainer);
+        updateButton.setPosition(80, 0, 0);
+
+        // 線上玩家顯示
+        const onlinePlayersNode = this.createUINode('OnlinePlayersLabel', parent);
+        const onlinePlayersLabel = onlinePlayersNode.addComponent(Label);
+        onlinePlayersLabel.string = '線上玩家: 尚未連接';
+        onlinePlayersLabel.fontSize = 18;
+        onlinePlayersNode.setPosition(0, -60, 0);
+        this.setupCenterLabel(onlinePlayersNode);
+    }
+
+    /**
+     * 綁定玩家姓名UI到PlayerNameGameView組件
+     */
+    private bindPlayerNameUI(playerNameView: PlayerNameGameView): void {
+        // 綁定UI元素 - 注意獲取Button組件而不是Node
+        playerNameView.playerNameInput = this.findChildComponent('PlayerNameInput', EditBox);
+        playerNameView.connectButton = this.findChildComponent('ConnectButton', Button);
+        playerNameView.updateNameButton = this.findChildComponent('UpdateNameButton', Button);
+        playerNameView.onlinePlayersLabel = this.findChildComponent('OnlinePlayersLabel', Label);
+        
+        console.log('🔗 玩家姓名UI元素綁定完成:', {
+            playerNameInput: !!playerNameView.playerNameInput,
+            connectButton: !!playerNameView.connectButton,
+            updateNameButton: !!playerNameView.updateNameButton,
+            onlinePlayersLabel: !!playerNameView.onlinePlayersLabel
+        });
     }
 }

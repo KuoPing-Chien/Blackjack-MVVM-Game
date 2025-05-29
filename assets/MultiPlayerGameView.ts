@@ -94,6 +94,48 @@ export class MultiPlayerGameView extends Component {
     })
     gameStatusLabel: Label = null;
 
+    // 玩家自身手牌顯示區域
+    @property({
+        type: Node,
+        tooltip: '玩家自身手牌顯示區域'
+    })
+    myCardsArea: Node = null;
+
+    // 玩家自身手牌詳情標籤
+    @property({
+        type: Label,
+        tooltip: '玩家自身手牌詳情標籤'
+    })
+    myCardsLabel: Label = null;
+
+    // 其他玩家手牌顯示區域
+    @property({
+        type: Node,
+        tooltip: '其他玩家手牌顯示區域'
+    })
+    otherPlayersCardsArea: Node = null;
+
+    // 其他玩家1手牌詳情標籤
+    @property({
+        type: Label,
+        tooltip: '其他玩家1手牌詳情標籤'
+    })
+    player1CardsLabel: Label = null;
+
+    // 其他玩家2手牌詳情標籤
+    @property({
+        type: Label,
+        tooltip: '其他玩家2手牌詳情標籤'
+    })
+    player2CardsLabel: Label = null;
+
+    // 莊家手牌詳情標籤
+    @property({
+        type: Label,
+        tooltip: '莊家手牌詳情標籤'
+    })
+    dealerCardsLabel: Label = null;
+
     // ViewModel實例
     private viewModel: GameViewModel = null;
     
@@ -188,7 +230,9 @@ export class MultiPlayerGameView extends Component {
         const playerName = this.playerNameInput?.string || `Player_${Date.now()}`;
         console.log('玩家加入遊戲:', playerName);
         
-        this.viewModel.joinGame(playerName);
+        // 先更新玩家姓名再加入游戲
+        this.viewModel.updatePlayerName(playerName);
+        this.viewModel.joinGame();
         this.hasJoinedGame = true;
         
         // 更新UI
@@ -202,7 +246,7 @@ export class MultiPlayerGameView extends Component {
      */
     private onStartGameClicked(): void {
         console.log('開始新遊戲');
-        this.viewModel.startNewGame();
+        this.viewModel.startGame();
         this.updateGameResult('');
     }
 
@@ -240,17 +284,29 @@ export class MultiPlayerGameView extends Component {
         if (gameState.players.length >= 1 && this.player1InfoLabel) {
             const player1 = gameState.players[0];
             this.player1InfoLabel.string = `${player1.name}: ${player1.score}分 ${player1.isBust ? '(爆牌)' : ''}`;
+            
+            // 更新玩家1手牌詳情
+            this.updatePlayerCardsDisplay(player1, this.player1CardsLabel);
         }
         
         if (gameState.players.length >= 2 && this.player2InfoLabel) {
             const player2 = gameState.players[1];
             this.player2InfoLabel.string = `${player2.name}: ${player2.score}分 ${player2.isBust ? '(爆牌)' : ''}`;
+            
+            // 更新玩家2手牌詳情
+            this.updatePlayerCardsDisplay(player2, this.player2CardsLabel);
         }
         
         // 更新莊家信息
         if (this.dealerInfoLabel) {
             this.dealerInfoLabel.string = `莊家: ${gameState.dealer.score}分 ${gameState.dealer.isBust ? '(爆牌)' : ''}`;
+            
+            // 更新莊家手牌詳情
+            this.updateDealerCardsDisplay(gameState.dealer);
         }
+        
+        // 更新玩家本身的手牌詳情
+        this.updateMyCardsDisplay(gameState.players);
         
         // 更新遊戲狀態
         this.updateGameStatus(this.getGamePhaseText(gameState.gamePhase));
@@ -410,5 +466,107 @@ export class MultiPlayerGameView extends Component {
         if (this.viewModel) {
             this.viewModel.dispose();
         }
+    }
+
+    /**
+     * 更新玩家手牌顯示
+     * @param player 玩家數據
+     * @param label 顯示標籤
+     */
+    private updatePlayerCardsDisplay(player: Player, label: Label): void {
+        if (!label) return;
+        
+        let cardsText = "";
+        if (player.hand && player.hand.length > 0) {
+            cardsText = `${player.name} 的牌: `;
+            player.hand.forEach((card, index) => {
+                const cardText = this.formatCardText(card);
+                cardsText += cardText;
+                if (index < player.hand.length - 1) {
+                    cardsText += ", ";
+                }
+            });
+        }
+        
+        label.string = cardsText;
+    }
+    
+    /**
+     * 更新莊家手牌顯示
+     * @param dealer 莊家數據
+     */
+    private updateDealerCardsDisplay(dealer: Player): void {
+        if (!this.dealerCardsLabel) return;
+        
+        let cardsText = "莊家的牌: ";
+        
+        if (dealer.hand && dealer.hand.length > 0) {
+            // 如果遊戲正在進行中，只顯示莊家的第一張牌
+            if (this.currentGameState && this.currentGameState.gamePhase === 'playing') {
+                const firstCard = dealer.hand[0];
+                cardsText += this.formatCardText(firstCard) + ", ?";
+            } else {
+                // 遊戲結束後顯示全部
+                dealer.hand.forEach((card, index) => {
+                    cardsText += this.formatCardText(card);
+                    if (index < dealer.hand.length - 1) {
+                        cardsText += ", ";
+                    }
+                });
+            }
+        }
+        
+        this.dealerCardsLabel.string = cardsText;
+    }
+    
+    /**
+     * 更新自己的手牌顯示
+     */
+    private updateMyCardsDisplay(players: Player[]): void {
+        if (!this.myCardsLabel) return;
+        
+        // 找到自己
+        const myPlayer = players.find(p => p.id === this.viewModel.currentPlayerId);
+        if (!myPlayer) {
+            this.myCardsLabel.string = "等待加入遊戲...";
+            return;
+        }
+        
+        let cardsText = "我的牌: ";
+        if (myPlayer.hand && myPlayer.hand.length > 0) {
+            myPlayer.hand.forEach((card, index) => {
+                cardsText += this.formatCardText(card);
+                if (index < myPlayer.hand.length - 1) {
+                    cardsText += ", ";
+                }
+            });
+            
+            cardsText += `\n總點數: ${myPlayer.score}點${myPlayer.isBust ? ' (爆牌)' : ''}`;
+        } else {
+            cardsText += "尚未發牌";
+        }
+        
+        this.myCardsLabel.string = cardsText;
+    }
+    
+    /**
+     * 格式化牌面文字
+     */
+    private formatCardText(card: any): string {
+        if (!card) return "?";
+        
+        if (card.suit === 'Hidden' || card.value === 'Hidden') {
+            return "?";
+        }
+        
+        const suitMap = {
+            'Hearts': '♥',
+            'Diamonds': '♦',
+            'Clubs': '♣',
+            'Spades': '♠'
+        };
+        
+        const suit = suitMap[card.suit] || card.suit;
+        return `${suit}${card.value}`;
     }
 }

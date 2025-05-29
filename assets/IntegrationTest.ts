@@ -184,7 +184,7 @@ export class IntegrationTest extends Component {
             
             // 測試遊戲初始化
             try {
-                viewModel.startNewGame();
+                viewModel.startGame(); // 修正方法名稱，使用 startGame 替代 startNewGame
                 console.log('  ✅ 遊戲初始化成功');
                 
                 // 檢查遊戲狀態
@@ -280,7 +280,7 @@ export class IntegrationTest extends Component {
         console.log('='.repeat(50));
         
         const gameView = this.sceneSetup?.getGameView();
-        const isConnected = gameView?.isConnected();
+        const isConnected = gameView?.['viewModel']?.isConnected;  // 修正: isConnected 是屬性不是方法
         const gameStats = this.sceneSetup?.getGameStats();
         
         const report = {

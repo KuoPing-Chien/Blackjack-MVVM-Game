@@ -6,6 +6,17 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// 游戏配置
+const GAME_CONFIG = {
+    ALLOW_SINGLE_PLAYER: true, // 设置为true允许单人游戏
+    MIN_PLAYERS: 1, // 最少玩家数（可以设置为1或2）
+    MAX_PLAYERS: 4,  // 最多玩家数
+    NAME_UPDATE_COOLDOWN_MINUTES: 5 // 姓名更新冷卻時間（分鐘）
+};
+
+// 姓名更新冷卻追蹤
+const nameUpdateCooldowns = new Map(); // Map<playerId, lastUpdateTime>
+
 let deck = [];
 let gameState = {
     players: new Map(), // Map<playerId, playerData>
@@ -100,6 +111,49 @@ function getPlayersArray() {
     return Array.from(gameState.players.values());
 }
 
+/**
+ * 檢查玩家是否可以更新姓名
+ * @param {string} playerId - 玩家ID
+ * @returns {boolean} - 是否可以更新姓名
+ */
+function canUpdatePlayerName(playerId) {
+    if (!nameUpdateCooldowns.has(playerId)) {
+        return true;
+    }
+
+    const lastUpdateTime = nameUpdateCooldowns.get(playerId);
+    const now = Date.now();
+    const cooldownMillis = GAME_CONFIG.NAME_UPDATE_COOLDOWN_MINUTES * 60 * 1000;
+    
+    return (now - lastUpdateTime) >= cooldownMillis;
+}
+
+/**
+ * 獲取玩家姓名更新的剩餘冷卻時間（毫秒）
+ * @param {string} playerId - 玩家ID
+ * @returns {number} - 剩餘冷卻時間（毫秒）
+ */
+function getNameUpdateCooldownRemaining(playerId) {
+    if (!nameUpdateCooldowns.has(playerId)) {
+        return 0;
+    }
+
+    const lastUpdateTime = nameUpdateCooldowns.get(playerId);
+    const now = Date.now();
+    const cooldownMillis = GAME_CONFIG.NAME_UPDATE_COOLDOWN_MINUTES * 60 * 1000;
+    const timePassed = now - lastUpdateTime;
+    
+    return Math.max(0, cooldownMillis - timePassed);
+}
+
+/**
+ * 記錄玩家姓名更新時間
+ * @param {string} playerId - 玩家ID
+ */
+function recordPlayerNameUpdate(playerId) {
+    nameUpdateCooldowns.set(playerId, Date.now());
+}
+
 function startNewGame() {
     initializeDeck();
     
@@ -173,16 +227,19 @@ wss.on('connection', (ws) => {
                     console.log(`Player ${playerName} (${playerId}) joined the game`);
                     
                     // 發送加入成功的確認訊息
+                    const minPlayers = GAME_CONFIG.ALLOW_SINGLE_PLAYER ? GAME_CONFIG.MIN_PLAYERS : 2;
+                    const readyToStart = gameState.players.size >= minPlayers;
+                    
                     ws.send(JSON.stringify({
                         action: 'joinedGame',
                         playerId: playerId,
                         playerName: playerName,
                         totalPlayers: gameState.players.size,
-                        message: `${playerName} joined the game. ${gameState.players.size >= 2 ? 'Ready to start!' : 'Waiting for more players...'}`
+                        message: `${playerName} joined the game. ${readyToStart ? 'Ready to start!' : 'Waiting for more players...'}`
                     }));
                     
                     // 如果有足夠玩家且遊戲未開始，準備開始遊戲
-                    if (gameState.players.size >= 2 && gameState.gamePhase === 'waiting') {
+                    if (readyToStart && gameState.gamePhase === 'waiting') {
                         console.log('Ready to start game with', gameState.players.size, 'players');
                         
                         // 通知所有玩家可以開始遊戲
@@ -197,13 +254,19 @@ wss.on('connection', (ws) => {
             
             else if (data.action === 'startGame') {
                 // 開始新遊戲
-                if (gameState.players.size >= 2) {
+                const minPlayers = GAME_CONFIG.ALLOW_SINGLE_PLAYER ? GAME_CONFIG.MIN_PLAYERS : 2;
+                
+                if (gameState.players.size >= minPlayers) {
                     startNewGame();
                     console.log('Game started with', gameState.players.size, 'players');
                 } else {
+                    const message = GAME_CONFIG.ALLOW_SINGLE_PLAYER ? 
+                        `Need at least ${minPlayers} player(s) to start the game` :
+                        'Need at least 2 players to start the game';
+                    
                     ws.send(JSON.stringify({
                         action: 'gameOver',
-                        result: 'Need at least 2 players to start the game'
+                        result: message
                     }));
                 }
             }
@@ -247,6 +310,66 @@ wss.on('connection', (ws) => {
                     player.hasStood = true;
                     player.isActive = false;
                     moveToNextPlayer();
+                }
+            }
+            
+            else if (data.action === 'updatePlayerName') {
+                // 更新玩家姓名
+                const playerId = data.playerId;
+                const newPlayerName = data.name || data.playerName; // 支持兩種參數名稱
+                const player = gameState.players.get(playerId);
+                
+                // 檢查冷卻時間
+                if (!canUpdatePlayerName(playerId)) {
+                    const remainingMs = getNameUpdateCooldownRemaining(playerId);
+                    const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+                    
+                    console.log(`Player ${playerId} name update rejected: Cooldown active (${remainingMinutes} minutes remaining)`);
+                    
+                    // 發送冷卻錯誤訊息
+                    ws.send(JSON.stringify({
+                        action: 'nameUpdateFailed',
+                        playerId: playerId,
+                        message: `姓名更新失敗：冷卻時間未到，請等待 ${remainingMinutes} 分鐘`,
+                        cooldownRemaining: remainingMs
+                    }));
+                    return;
+                }
+                
+                if (player && newPlayerName && newPlayerName.trim().length > 0) {
+                    const oldName = player.name;
+                    player.name = newPlayerName.trim();
+                    
+                    // 更新冷卻時間
+                    recordPlayerNameUpdate(playerId);
+                    
+                    console.log(`Player ${playerId} updated name from "${oldName}" to "${player.name}" (Cooldown: ${GAME_CONFIG.NAME_UPDATE_COOLDOWN_MINUTES} minutes)`);
+                    
+                    // 通知所有玩家姓名更新
+                    broadcastToAllPlayers({
+                        action: 'playerNameUpdated',
+                        playerId: playerId,
+                        oldName: oldName,
+                        newName: player.name,
+                        players: getPlayersArray(),
+                        message: `${oldName} 更名為 ${player.name}`
+                    });
+                    
+                    // 發送確認給更新者
+                    ws.send(JSON.stringify({
+                        action: 'nameUpdateConfirmed',
+                        playerId: playerId,
+                        playerName: player.name,
+                        message: `姓名已更新為: ${player.name}`,
+                        cooldownMinutes: GAME_CONFIG.NAME_UPDATE_COOLDOWN_MINUTES
+                    }));
+                } else {
+                    // 發送錯誤訊息
+                    ws.send(JSON.stringify({
+                        action: 'nameUpdateFailed',
+                        playerId: playerId,
+                        message: '更新姓名失敗：請提供有效的姓名'
+                    }));
                 }
             }
         } catch (error) {

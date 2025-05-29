@@ -9,6 +9,20 @@
 
 本專案使用 Cocos Creator 作為前端，Node.js 作為後端，實現了完整的21點（Blackjack）遊戲。代碼採用 MVVM（Model-View-ViewModel）架構模式，並包含完整的中文註解。
 
+## 🎯 核心功能
+
+### 🎮 遊戲模式
+- **單人模式** - 一個玩家對戰莊家
+- **多人模式** - 最多4個玩家同時對戰莊家
+- **靈活配置** - 可在服務器端配置最少玩家數
+
+### ⚙️ 技術特性
+- WebSocket 即時通訊
+- MVVM 架構模式
+- TypeScript + Node.js
+- Cocos Creator 3.x
+- 完整的中文註解
+
 ## 架構說明
 
 ### MVVM架構組成
@@ -105,7 +119,31 @@
    - 顯示最終分數
    - 記錄遊戲統計
 
-## 安裝和運行
+## 🚀 快速開始
+
+### 單人遊戲測試
+
+1. **啟動服務器**
+   ```bash
+   node server.js
+   ```
+
+2. **測試單人遊戲**
+   ```bash
+   # 完整測試
+   node complete-single-player-test.js
+   
+   # 快速測試
+   node quick-single-player-test.js
+   ```
+
+### 多人遊戲測試
+```bash
+# 在不同終端窗口運行
+node multiplayer-test.js
+```
+
+## 📦 安裝和運行
 
 ### 前置需求
 - Node.js (v14+)
@@ -129,6 +167,18 @@
    - 將 `GameView.ts` 組件附加到場景節點
    - 配置UI元素屬性
    - 運行遊戲
+
+### ⚙️ 服務器配置
+
+在 `server.js` 中可以配置遊戲參數：
+
+```javascript
+const GAME_CONFIG = {
+    ALLOW_SINGLE_PLAYER: true, // 允許單人遊戲
+    MIN_PLAYERS: 1,            // 最少玩家數
+    MAX_PLAYERS: 4             // 最多玩家數
+};
+```
 
 ### UI元素配置
 
@@ -203,3 +253,81 @@ MVVMTest.runAllTests();
 ## 作者
 
 此專案展示了如何將傳統的組件化代碼重構為現代的MVVM架構，並在遊戲開發中應用最佳實踐。
+
+# 21點遊戲 (Blackjack Game)
+
+一款使用Cocos Creator和Node.js開發的多人21點遊戲。
+
+## 功能特色
+
+- **完整的MVVM架構** - 提高代碼可維護性和擴展性
+- **WebSocket即時通訊** - 實現多人遊戲同步
+- **TypeScript** - 靜態類型檢查，提高代碼質量
+- **玩家姓名更新** - 可即時更新自定義玩家姓名
+- **姓名更新冷卻機制** - 防止頻繁更改造成混亂
+
+## 快速開始
+
+1. **啟動伺服器**
+   ```bash
+   node server.js
+   ```
+
+2. **在Cocos Creator中打開項目**
+   - 創建新場景
+   - 添加 `SinglePlayerTestScene` 組件到一個空節點上
+   - 點擊播放按鈕開始遊戲
+
+## 玩家姓名更新功能
+
+### 使用方法
+
+1. **輸入新姓名**：在輸入框中輸入您想要的新玩家姓名
+2. **點擊更新按鈕**：系統會發送更新姓名請求
+3. **觀察結果**：
+   - 姓名更新成功：您的姓名會立即更新
+   - 姓名更新失敗：會顯示錯誤信息（例如冷卻時間未到）
+
+### 冷卻時間
+
+為防止玩家頻繁更改姓名造成混亂，系統實施了冷卻時間機制：
+- 默認冷卻時間：5分鐘
+- 冷卻中：更新按鈕將被禁用，且顯示剩餘冷卻時間
+- 可配置：在Inspector面板中可通過`nameUpdateCooldownMinutes`參數調整
+
+### 示例
+
+```typescript
+// 在GameViewModel中設置自定義冷卻時間
+viewModel.nameUpdateCooldownTime = 10; // 設置為10分鐘
+
+// 在SinglePlayerGameView中設置自定義冷卻時間
+gameView.nameUpdateCooldownMinutes = 1; // 設置為1分鐘
+```
+
+## 多人遊戲
+
+遊戲支持多人模式，玩家可以同時加入遊戲並輪流出牌。每位玩家都有自己的姓名和ID。
+
+### 姓名同步
+
+當一個玩家更新姓名時，所有連接的玩家都會收到即時通知，並看到更新後的姓名。這使得遊戲更加社交化和互動性強。
+
+## 開發者API
+
+### 關鍵方法
+
+```typescript
+// 更新玩家姓名
+viewModel.updatePlayerName(newName);
+
+// 檢查是否可以更新姓名（冷卻是否結束）
+const canUpdate = viewModel.canUpdateName();
+
+// 獲取剩餘冷卻時間（秒）
+const remainingSeconds = viewModel.getNameUpdateCooldownRemaining();
+```
+
+---
+
+詳細開發文檔請參閱 [開發者指南](DEVELOPMENT_GUIDE.md)。

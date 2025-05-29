@@ -106,7 +106,9 @@ export class GameView extends Component {
         });
         
         // 自動加入遊戲作為單人玩家
-        this.viewModel.joinGame('Player 1');
+        // 先設置玩家名稱，然後加入遊戲
+        this.viewModel.updatePlayerName('Player 1');
+        this.viewModel.joinGame();
     }
 
     /**
@@ -165,7 +167,7 @@ export class GameView extends Component {
      */
     private onRestartButtonClicked(): void {
         console.log('重新開始遊戲');
-        this.viewModel.startNewGame();
+        this.viewModel.startGame(); // 修正：startNewGame -> startGame
         this.updateGameResult('');
         this.setButtonsInteractable(true);
     }
@@ -238,7 +240,7 @@ export class GameView extends Component {
         }
         
         // 根據連接狀態啟用或禁用遊戲按鈕
-        if (connected && this.viewModel.gameState.gamePhase !== 'ended') {
+        if (connected && this.viewModel && this.viewModel.gameState && this.viewModel.gameState.gamePhase !== 'ended') {
             this.setButtonsInteractable(true);
         } else {
             this.setButtonsInteractable(false);
@@ -368,7 +370,7 @@ export class GameView extends Component {
         console.log('[GameView] 重置遊戲狀態...');
         
         if (this.viewModel) {
-            this.viewModel.startNewGame();
+            this.viewModel.startGame(); // 修正：startNewGame -> startGame
         }
         
         // 重置UI顯示
@@ -398,8 +400,9 @@ export class GameView extends Component {
 
     /**
      * 獲取連接狀態
+     * @returns 是否已連接到服務器
      */
-    public isConnected(): boolean {
+    public get isConnected(): boolean {
         return this.viewModel ? this.viewModel.isConnected : false;
     }
 

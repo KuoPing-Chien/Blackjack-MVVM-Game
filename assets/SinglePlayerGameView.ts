@@ -17,6 +17,24 @@ export class SinglePlayerGameView extends Component {
     })
     playerScoreLabel: Label = null;
 
+    // 玩家姓名相關屬性
+    @property({
+        type: Label,
+        tooltip: '玩家姓名顯示標籤'
+    })
+    playerNameLabel: Label = null;
+    
+    @property({
+        tooltip: '玩家姓名更新冷卻時間（分鐘）'
+    })
+    nameUpdateCooldownMinutes: number = 5;
+    
+    @property({
+        type: Label,
+        tooltip: '冷卻時間顯示標籤'
+    })
+    cooldownLabel: Label = null;
+
     // UI元素屬性 - 莊家分數顯示標籤
     @property({
         type: Label,
@@ -58,6 +76,25 @@ export class SinglePlayerGameView extends Component {
         tooltip: '連接狀態顯示標籤'
     })
     connectionStatusLabel: Label = null;
+    
+    // 玩家姓名輸入相關UI
+    @property({
+        type: Node,
+        tooltip: '姓名輸入區塊'
+    })
+    nameInputArea: Node = null;
+
+    @property({
+        type: Node,
+        tooltip: '姓名輸入框'
+    })
+    nameInputField: Node = null;
+
+    @property({
+        type: Node,
+        tooltip: '姓名更新按鈕'
+    })
+    updateNameButton: Node = null;
 
     // ViewModel實例
     private viewModel: GameViewModel = null;
@@ -94,10 +131,20 @@ export class SinglePlayerGameView extends Component {
         this.viewModel.setOnConnectionStatus((connected) => {
             this.updateConnectionStatus(connected);
         });
+        
+        // 添加玩家姓名更新回調
+        this.viewModel.setOnPlayerNameUpdate((playerId, newName) => {
+            this.updatePlayerNameDisplay(playerId, newName);
+        });
+        
+        // 添加冷卻時間更新回調
+        this.viewModel.setOnNameUpdateCooldown((cooldownEnd) => {
+            this.startFormattedCooldownTimer(cooldownEnd);
+        });
 
         // 自動加入遊戲（單人模式）
         setTimeout(() => {
-            this.viewModel.joinGame('Player');
+            this.viewModel.joinGame();
         }, 1000);
     }
 
@@ -118,6 +165,11 @@ export class SinglePlayerGameView extends Component {
         // 重新開始按鈕點擊事件
         if (this.restartButton) {
             this.restartButton.on(Node.EventType.MOUSE_DOWN, this.onRestartButtonClicked, this);
+        }
+
+        // 姓名更新按鈕點擊事件
+        if (this.updateNameButton) {
+            this.updateNameButton.on(Node.EventType.MOUSE_DOWN, this.onUpdateNameButtonClicked, this);
         }
     }
 
@@ -152,9 +204,31 @@ export class SinglePlayerGameView extends Component {
      */
     private onRestartButtonClicked(): void {
         console.log('重新開始遊戲');
-        this.viewModel.startNewGame();
+        this.viewModel.startGame();
         this.updateGameResult('');
         this.setButtonsInteractable(true);
+    }
+
+    /**
+     * 姓名更新按鈕點擊處理
+     */
+    private onUpdateNameButtonClicked(): void {
+        console.log('更新玩家姓名');
+        const newName = this.getNameInputValue();
+        this.viewModel.updatePlayerName(newName);
+    }
+
+    /**
+     * 獲取姓名輸入框的值
+     */
+    private getNameInputValue(): string {
+        if (!this.nameInputField) return '';
+        
+        const inputComponent = this.nameInputField.getComponent('cc.EditBox');
+        if (inputComponent && typeof inputComponent['string'] === 'string') {
+            return inputComponent['string'];
+        }
+        return '';
     }
 
     /**
@@ -268,6 +342,84 @@ export class SinglePlayerGameView extends Component {
     onDestroy(): void {
         if (this.viewModel) {
             this.viewModel.dispose();
+        }
+    }
+
+    /**
+     * 更新玩家姓名顯示
+     */
+    private updatePlayerNameDisplay(playerId: string, newName: string): void {
+        // 假設單人模式下玩家ID固定為'single_player'
+        if (playerId === 'single_player' && this.playerNameLabel) {
+            this.playerNameLabel.string = newName;
+        }
+    }
+
+    /**
+     * 格式化冷卻時間顯示
+     * @param seconds 剩餘秒數
+     * @returns 格式化的時間字串 (例如: 3分30秒)
+     */
+    private formatCooldownTime(seconds: number): string {
+        if (seconds < 60) {
+            return `${seconds}秒`;
+        }
+        
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        
+        if (remainingSeconds === 0) {
+            return `${minutes}分鐘`;
+        }
+        
+        return `${minutes}分${remainingSeconds}秒`;
+    }
+    
+    /**
+     * 開始冷卻計時器 (使用更好的格式)
+     */
+    private startFormattedCooldownTimer(cooldownEnd: number): void {
+        if (this.cooldownLabel) {
+            const updateCooldown = () => {
+                const remainingSecs = Math.ceil((cooldownEnd - Date.now()) / 1000);
+                
+                if (remainingSecs > 0) {
+                    this.cooldownLabel.string = `冷卻中: ${this.formatCooldownTime(remainingSecs)}`;
+                    return true;
+                } else {
+                    this.cooldownLabel.string = '可以更新姓名';
+                    this.enableNameUpdateUI(true);
+                    return false;
+                }
+            };
+            
+            // 立即更新一次
+            const shouldContinue = updateCooldown();
+            
+            if (shouldContinue) {
+                // 禁用姓名更新按鈕
+                this.enableNameUpdateUI(false);
+                
+                // 每秒更新一次
+                this.unscheduleAllCallbacks();
+                this.schedule(() => {
+                    if (!updateCooldown()) {
+                        this.unscheduleAllCallbacks();
+                    }
+                }, 1);
+            }
+        }
+    }
+    
+    /**
+     * 啟用/禁用姓名更新UI
+     */
+    private enableNameUpdateUI(enabled: boolean): void {
+        if (this.updateNameButton) {
+            const button = this.updateNameButton.getComponent(Button);
+            if (button) {
+                button.interactable = enabled;
+            }
         }
     }
 }
