@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Label, Button } from 'cc';
 import { GameViewModel } from './GameViewModel';
+import { GameState } from './GameModel';
 
 const { ccclass, property } = _decorator;
 
@@ -91,18 +92,21 @@ export class GameView extends Component {
     private initializeViewModel(): void {
         this.viewModel = new GameViewModel();
         
-        // 綁定ViewModel回調事件
-        this.viewModel.setOnScoreUpdate((playerScore, dealerScore) => {
-            this.updateScoreDisplay(playerScore, dealerScore);
+        // 綁定ViewModel回調事件 - 使用新的多人遊戲API
+        this.viewModel.setOnGameStateUpdate((gameState) => {
+            this.updateGameDisplay(gameState);
         });
         
-        this.viewModel.setOnGameEnd((result) => {
+        this.viewModel.setOnGameEnd((result, finalScores) => {
             this.handleGameEnd(result);
         });
         
         this.viewModel.setOnConnectionStatus((connected) => {
             this.updateConnectionStatus(connected);
         });
+        
+        // 自動加入遊戲作為單人玩家
+        this.viewModel.joinGame('Player 1');
     }
 
     /**
@@ -167,7 +171,31 @@ export class GameView extends Component {
     }
 
     /**
-     * 更新分數顯示
+     * 更新遊戲顯示（新的多人遊戲方法）
+     */
+    private updateGameDisplay(gameState: GameState): void {
+        // 更新玩家分數（如果有玩家的話）
+        if (gameState.players && gameState.players.length > 0) {
+            const player = gameState.players[0]; // 使用第一個玩家作為主玩家
+            if (this.playerScoreLabel) {
+                this.playerScoreLabel.string = `玩家: ${player.score}`;
+            }
+        } else {
+            if (this.playerScoreLabel) {
+                this.playerScoreLabel.string = `玩家: 0`;
+            }
+        }
+        
+        // 更新莊家分數
+        if (gameState.dealer && this.dealerScoreLabel) {
+            this.dealerScoreLabel.string = `莊家: ${gameState.dealer.score}`;
+        } else if (this.dealerScoreLabel) {
+            this.dealerScoreLabel.string = `莊家: 0`;
+        }
+    }
+
+    /**
+     * 更新分數顯示（保留向後兼容性）
      */
     private updateScoreDisplay(playerScore: number, dealerScore: number): void {
         if (this.playerScoreLabel) {

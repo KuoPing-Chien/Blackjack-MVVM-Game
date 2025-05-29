@@ -183,8 +183,8 @@ export class SystemValidator extends Component {
             
             // 檢查初始狀態
             const hasInitialState = testViewModel.gameState !== undefined &&
-                                  testViewModel.playerScore !== undefined &&
-                                  testViewModel.dealerScore !== undefined;
+                                  testViewModel.currentPlayerId !== undefined &&
+                                  testViewModel.allPlayers !== undefined;
             
             this.validationResults.gameLogic = hasInitialState;
             console.log(`  遊戲狀態初始化: ${hasInitialState ? '✅' : '❌'}`);

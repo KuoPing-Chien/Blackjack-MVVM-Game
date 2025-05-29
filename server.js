@@ -7,6 +7,49 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 let deck = [];
+let gameState = {
+    players: new Map(), // Map<playerId, playerData>
+    dealer: null,
+    currentPlayerIndex: 0,
+    gamePhase: 'waiting', // 'waiting', 'playing', 'dealer_turn', 'ended'
+    connectedClients: new Map() // Map<playerId, websocket>
+};
+
+function initializeDeck() {
+    deck = [];
+    const suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
+    const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    for (const suit of suits) {
+        for (const value of values) {
+            deck.push({ suit, value });
+        }
+    }
+    deck = deck.sort(() => Math.random() - 0.5); // Shuffle deck
+}
+
+function createPlayer(playerId, playerName) {
+    return {
+        id: playerId,
+        name: playerName,
+        hand: [],
+        score: 0,
+        isActive: false,
+        hasStood: false,
+        isBust: false
+    };
+}
+
+function createDealer() {
+    return {
+        id: 'dealer',
+        name: 'Dealer',
+        hand: [],
+        score: 0,
+        isActive: false,
+        hasStood: false,
+        isBust: false
+    };
+}
 
 function initializeDeck() {
     deck = [];
@@ -40,71 +83,171 @@ function calculateScore(hand) {
     return score;
 }
 
+function updatePlayerScore(player) {
+    player.score = calculateScore(player.hand);
+    player.isBust = player.score > 21;
+}
+
+function broadcastToAllPlayers(message) {
+    gameState.connectedClients.forEach((ws, playerId) => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+        }
+    });
+}
+
+function getPlayersArray() {
+    return Array.from(gameState.players.values());
+}
+
+function startNewGame() {
+    initializeDeck();
+    
+    // 重置所有玩家
+    gameState.players.forEach(player => {
+        player.hand = [];
+        player.score = 0;
+        player.isActive = false;
+        player.hasStood = false;
+        player.isBust = false;
+    });
+    
+    // 重置莊家
+    gameState.dealer = createDealer();
+    gameState.currentPlayerIndex = 0;
+    gameState.gamePhase = 'playing';
+    
+    // 發兩張牌給每個玩家
+    gameState.players.forEach(player => {
+        player.hand.push(deck.pop(), deck.pop());
+        updatePlayerScore(player);
+    });
+    
+    // 發兩張牌給莊家
+    gameState.dealer.hand.push(deck.pop(), deck.pop());
+    updatePlayerScore(gameState.dealer);
+    
+    // 設置第一個玩家為活躍
+    if (gameState.players.size > 0) {
+        const firstPlayer = getPlayersArray()[0];
+        firstPlayer.isActive = true;
+    }
+    
+    // 廣播遊戲狀態（隱藏莊家第二張牌）
+    const hiddenDealerHand = [
+        gameState.dealer.hand[0],
+        { suit: 'Hidden', value: 'Hidden' }
+    ];
+    
+    broadcastToAllPlayers({
+        action: 'updateGameState',
+        players: getPlayersArray(),
+        dealer: {
+            ...gameState.dealer,
+            hand: hiddenDealerHand,
+            score: calculateScore([gameState.dealer.hand[0]])
+        },
+        currentPlayerIndex: gameState.currentPlayerIndex,
+        gamePhase: gameState.gamePhase
+    });
+}
+
 wss.on('connection', (ws) => {
     console.log('A user connected');
-    let playerHand = [];
-    let dealerHand = [];
-
+    
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
+            console.log('Received message:', data);
             
-            if (data.action === 'startGame') {
-                initializeDeck();
-                playerHand = [deck.pop(), deck.pop()];
-                dealerHand = [deck.pop(), deck.pop()];
-
-                ws.send(JSON.stringify({
-                    action: 'updateGameState',
-                    playerHand,
-                    dealerHand: [dealerHand[0], { suit: 'Hidden', value: 'Hidden' }],
-                    playerScore: calculateScore(playerHand),
-                    dealerScore: calculateScore([dealerHand[0]]),
-                }));
+            if (data.action === 'joinGame') {
+                // 玩家加入遊戲
+                const playerId = data.playerId;
+                const playerName = data.playerName || `Player ${gameState.players.size + 1}`;
+                
+                if (!gameState.players.has(playerId)) {
+                    const newPlayer = createPlayer(playerId, playerName);
+                    gameState.players.set(playerId, newPlayer);
+                    gameState.connectedClients.set(playerId, ws);
+                    
+                    console.log(`Player ${playerName} (${playerId}) joined the game`);
+                    
+                    // 發送加入成功的確認訊息
+                    ws.send(JSON.stringify({
+                        action: 'joinedGame',
+                        playerId: playerId,
+                        playerName: playerName,
+                        totalPlayers: gameState.players.size,
+                        message: `${playerName} joined the game. ${gameState.players.size >= 2 ? 'Ready to start!' : 'Waiting for more players...'}`
+                    }));
+                    
+                    // 如果有足夠玩家且遊戲未開始，準備開始遊戲
+                    if (gameState.players.size >= 2 && gameState.gamePhase === 'waiting') {
+                        console.log('Ready to start game with', gameState.players.size, 'players');
+                        
+                        // 通知所有玩家可以開始遊戲
+                        broadcastToAllPlayers({
+                            action: 'readyToStart',
+                            totalPlayers: gameState.players.size,
+                            message: 'Game is ready to start!'
+                        });
+                    }
+                }
+            }
+            
+            else if (data.action === 'startGame') {
+                // 開始新遊戲
+                if (gameState.players.size >= 2) {
+                    startNewGame();
+                    console.log('Game started with', gameState.players.size, 'players');
+                } else {
+                    ws.send(JSON.stringify({
+                        action: 'gameOver',
+                        result: 'Need at least 2 players to start the game'
+                    }));
+                }
             }
             
             else if (data.action === 'playerHit') {
-                playerHand.push(deck.pop());
-                const playerScore = calculateScore(playerHand);
-
-                if (playerScore > 21) {
-                    ws.send(JSON.stringify({
-                        action: 'gameOver',
-                        result: 'Dealer Wins!',
-                        playerHand,
-                        playerScore
-                    }));
-                } else {
-                    ws.send(JSON.stringify({
-                        action: 'updateGameState',
-                        playerHand,
-                        playerScore
-                    }));
+                // 玩家要牌
+                const playerId = data.playerId;
+                const player = gameState.players.get(playerId);
+                
+                if (player && player.isActive && gameState.gamePhase === 'playing') {
+                    player.hand.push(deck.pop());
+                    updatePlayerScore(player);
+                    
+                    if (player.isBust) {
+                        player.hasStood = true;
+                        player.isActive = false;
+                        moveToNextPlayer();
+                    } else {
+                        // 更新遊戲狀態
+                        broadcastToAllPlayers({
+                            action: 'updateGameState',
+                            players: getPlayersArray(),
+                            dealer: {
+                                ...gameState.dealer,
+                                hand: [gameState.dealer.hand[0], { suit: 'Hidden', value: 'Hidden' }],
+                                score: calculateScore([gameState.dealer.hand[0]])
+                            },
+                            currentPlayerIndex: gameState.currentPlayerIndex,
+                            gamePhase: gameState.gamePhase
+                        });
+                    }
                 }
             }
             
             else if (data.action === 'playerStand') {
-                while (calculateScore(dealerHand) < 17) {
-                    dealerHand.push(deck.pop());
+                // 玩家停牌
+                const playerId = data.playerId;
+                const player = gameState.players.get(playerId);
+                
+                if (player && player.isActive && gameState.gamePhase === 'playing') {
+                    player.hasStood = true;
+                    player.isActive = false;
+                    moveToNextPlayer();
                 }
-                const playerScore = calculateScore(playerHand);
-                const dealerScore = calculateScore(dealerHand);
-
-                let result = '';
-                if (dealerScore > 21 || playerScore > dealerScore) {
-                    result = 'Player Wins!';
-                } else {
-                    result = 'Dealer Wins!';
-                }
-
-                ws.send(JSON.stringify({
-                    action: 'gameOver',
-                    result,
-                    playerHand,
-                    dealerHand,
-                    playerScore,
-                    dealerScore
-                }));
             }
         } catch (error) {
             console.error('Error parsing message:', error);
@@ -113,9 +256,105 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         console.log('A user disconnected');
+        // 找到並移除斷線的玩家
+        for (const [playerId, socket] of gameState.connectedClients) {
+            if (socket === ws) {
+                gameState.connectedClients.delete(playerId);
+                gameState.players.delete(playerId);
+                console.log(`Player ${playerId} disconnected and removed from game`);
+                break;
+            }
+        }
     });
 });
 
+function moveToNextPlayer() {
+    const players = getPlayersArray();
+    
+    // 找下一個還沒停牌的玩家
+    let nextPlayerFound = false;
+    for (let i = gameState.currentPlayerIndex + 1; i < players.length; i++) {
+        if (!players[i].hasStood && !players[i].isBust) {
+            gameState.currentPlayerIndex = i;
+            players[i].isActive = true;
+            nextPlayerFound = true;
+            break;
+        }
+    }
+    
+    if (!nextPlayerFound) {
+        // 所有玩家都完成了，開始莊家回合
+        startDealerTurn();
+    } else {
+        // 通知輪到下一個玩家
+        broadcastToAllPlayers({
+            action: 'nextPlayer',
+            players: getPlayersArray(),
+            currentPlayerIndex: gameState.currentPlayerIndex,
+            gamePhase: gameState.gamePhase
+        });
+    }
+}
+
+function startDealerTurn() {
+    gameState.gamePhase = 'dealer_turn';
+    
+    // 莊家自動要牌直到17點或以上
+    while (gameState.dealer.score < 17) {
+        gameState.dealer.hand.push(deck.pop());
+        updatePlayerScore(gameState.dealer);
+    }
+    
+    // 通知莊家回合
+    broadcastToAllPlayers({
+        action: 'dealerTurn',
+        dealer: gameState.dealer,
+        gamePhase: gameState.gamePhase
+    });
+    
+    // 延遲一點時間後結束遊戲
+    setTimeout(() => {
+        endGame();
+    }, 2000);
+}
+
+function endGame() {
+    gameState.gamePhase = 'ended';
+    
+    // 計算結果
+    const results = [];
+    const dealerScore = gameState.dealer.score;
+    const dealerBust = gameState.dealer.isBust;
+    
+    gameState.players.forEach(player => {
+        let result = '';
+        if (player.isBust) {
+            result = `${player.name}: Bust! Dealer Wins`;
+        } else if (dealerBust) {
+            result = `${player.name}: Dealer Bust! Player Wins`;
+        } else if (player.score > dealerScore) {
+            result = `${player.name}: Player Wins (${player.score} vs ${dealerScore})`;
+        } else if (player.score < dealerScore) {
+            result = `${player.name}: Dealer Wins (${dealerScore} vs ${player.score})`;
+        } else {
+            result = `${player.name}: Tie (${player.score})`;
+        }
+        results.push(result);
+    });
+    
+    // 廣播遊戲結果
+    broadcastToAllPlayers({
+        action: 'gameOver',
+        result: results.join('\n'),
+        players: getPlayersArray(),
+        dealer: gameState.dealer,
+        gamePhase: gameState.gamePhase
+    });
+    
+    console.log('Game ended. Results:', results);
+}
+
 server.listen(3000, () => {
-    console.log('Server is running on http://localhost:3000');
+    console.log('Multi-player Blackjack Server is running on http://localhost:3000');
+    console.log('Waiting for players to join...');
 });

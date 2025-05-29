@@ -43,10 +43,13 @@ export class MVVMTest {
         const isBust = GameModel.isBust(bustCards);
         console.log('測試牌組 [K, Q, 5] 是否爆牌:', isBust, '(應該是true)');
         
-        // 測試狀態更新
+        // 測試狀態更新 - 使用正確的GameState結構
         model.updateGameState({
-            playerScore: 20,
-            dealerScore: 18,
+            players: [
+                { id: 'player1', name: 'Player 1', hand: [], score: 20, isActive: true, hasStood: false, isBust: false }
+            ],
+            dealer: { id: 'dealer', name: 'Dealer', hand: [], score: 18, isActive: false, hasStood: false, isBust: false },
+            currentPlayerIndex: 0,
             gamePhase: 'playing'
         });
         console.log('更新後的遊戲狀態:', model.gameState);
@@ -69,17 +72,17 @@ export class MVVMTest {
         
         // 測試初始狀態
         console.log('初始遊戲狀態:', viewModel.gameState);
-        console.log('初始玩家分數:', viewModel.playerScore);
-        console.log('初始莊家分數:', viewModel.dealerScore);
+        console.log('當前玩家ID:', viewModel.currentPlayerId);
+        console.log('所有玩家:', viewModel.allPlayers);
         console.log('連接狀態:', viewModel.isConnected);
         
         // 設置回調函數進行測試
-        viewModel.setOnScoreUpdate((playerScore, dealerScore) => {
-            console.log(`分數更新回調 - 玩家: ${playerScore}, 莊家: ${dealerScore}`);
+        viewModel.setOnGameStateUpdate((gameState) => {
+            console.log('遊戲狀態更新回調:', gameState);
         });
         
-        viewModel.setOnGameEnd((result) => {
-            console.log(`遊戲結束回調 - 結果: ${result}`);
+        viewModel.setOnGameEnd((result, finalScores) => {
+            console.log(`遊戲結束回調 - 結果: ${result}`, '最終分數:', finalScores);
         });
         
         viewModel.setOnConnectionStatus((connected) => {

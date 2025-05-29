@@ -187,10 +187,13 @@ export class IntegrationTest extends Component {
                 viewModel.startNewGame();
                 console.log('  ✅ 遊戲初始化成功');
                 
-                // 檢查初始分數
-                const playerScore = viewModel.playerScore;
-                const dealerScore = viewModel.dealerScore;
-                console.log(`  📊 初始分數 - 玩家: ${playerScore}, 莊家: ${dealerScore}`);
+                // 檢查遊戲狀態
+                const gameState = viewModel.gameState;
+                const currentPlayer = viewModel.currentPlayer;
+                const dealer = viewModel.dealer;
+                console.log('  📊 當前遊戲狀態:', gameState);
+                console.log('  👤 當前玩家:', currentPlayer);
+                console.log('  🎰 莊家狀態:', dealer);
                 
             } catch (error) {
                 console.error('  ❌ 遊戲初始化失敗:', error);

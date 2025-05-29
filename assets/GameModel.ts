@@ -7,33 +7,48 @@ export interface Card {
 }
 
 /**
+ * 玩家數據模型
+ */
+export interface Player {
+    id: string;         // 玩家ID
+    name: string;       // 玩家名稱
+    hand: Card[];       // 玩家手牌
+    score: number;      // 玩家分數
+    isActive: boolean;  // 是否為當前活躍玩家
+    hasStood: boolean;  // 是否已停牌
+    isBust: boolean;    // 是否爆牌
+}
+
+/**
  * 遊戲狀態數據模型
  */
 export interface GameState {
-    playerHand: Card[];     // 玩家手牌
-    dealerHand: Card[];     // 莊家手牌
-    playerScore: number;    // 玩家分數
-    dealerScore: number;    // 莊家分數
-    gamePhase: 'waiting' | 'playing' | 'ended'; // 遊戲階段
+    players: Player[];      // 所有玩家（不包括莊家）
+    dealer: Player;         // 莊家
+    currentPlayerIndex: number; // 當前活躍玩家索引
+    gamePhase: 'waiting' | 'playing' | 'dealer_turn' | 'ended'; // 遊戲階段
+    gameResult?: string;    // 遊戲結果
 }
 
 /**
  * 伺服器訊息數據模型
  */
 export interface ServerMessage {
-    action: 'updateGameState' | 'gameOver'; // 動作類型
-    playerHand?: Card[];                    // 玩家手牌
-    dealerHand?: Card[];                    // 莊家手牌
-    playerScore?: number;                   // 玩家分數
-    dealerScore?: number;                   // 莊家分數
-    result?: string;                        // 遊戲結果
+    action: 'updateGameState' | 'gameOver' | 'nextPlayer' | 'dealerTurn'; // 動作類型
+    players?: Player[];         // 所有玩家狀態
+    dealer?: Player;           // 莊家狀態
+    currentPlayerIndex?: number; // 當前活躍玩家索引
+    gamePhase?: string;        // 遊戲階段
+    result?: string;           // 遊戲結果
 }
 
 /**
  * 客戶端訊息數據模型
  */
 export interface ClientMessage {
-    action: 'startGame' | 'playerHit' | 'playerStand'; // 動作類型
+    action: 'start' | 'hit' | 'stand' | 'join' | 'startGame' | 'playerHit' | 'playerStand' | 'joinGame'; // 動作類型
+    playerId?: string;         // 玩家ID
+    playerName?: string;       // 玩家名稱
 }
 
 /**
@@ -73,10 +88,17 @@ export class GameModel {
      */
     private initializeDefaultValues(): void {
         this._gameState = {
-            playerHand: [],
-            dealerHand: [],
-            playerScore: 0,
-            dealerScore: 0,
+            players: [],
+            dealer: {
+                id: 'dealer',
+                name: 'Dealer',
+                hand: [],
+                score: 0,
+                isActive: false,
+                hasStood: false,
+                isBust: false
+            },
+            currentPlayerIndex: 0,
             gamePhase: 'waiting'
         };
 
@@ -105,11 +127,47 @@ export class GameModel {
      * 重置遊戲狀態
      */
     public resetGameState(): void {
-        this._gameState.playerHand = [];
-        this._gameState.dealerHand = [];
-        this._gameState.playerScore = 0;
-        this._gameState.dealerScore = 0;
+        this._gameState.players = [];
+        this._gameState.dealer = {
+            id: 'dealer',
+            name: 'Dealer',
+            hand: [],
+            score: 0,
+            isActive: false,
+            hasStood: false,
+            isBust: false
+        };
+        this._gameState.currentPlayerIndex = 0;
         this._gameState.gamePhase = 'waiting';
+    }
+
+    /**
+     * 添加玩家
+     */
+    public addPlayer(playerId: string, playerName: string): void {
+        const newPlayer: Player = {
+            id: playerId,
+            name: playerName,
+            hand: [],
+            score: 0,
+            isActive: false,
+            hasStood: false,
+            isBust: false
+        };
+        this._gameState.players.push(newPlayer);
+    }
+
+    /**
+     * 設置當前活躍玩家
+     */
+    public setCurrentPlayer(index: number): void {
+        // 重置所有玩家的活躍狀態
+        this._gameState.players.forEach(player => player.isActive = false);
+        
+        if (index >= 0 && index < this._gameState.players.length) {
+            this._gameState.currentPlayerIndex = index;
+            this._gameState.players[index].isActive = true;
+        }
     }
 
     /**
